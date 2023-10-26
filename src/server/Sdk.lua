@@ -44,7 +44,7 @@ end
 
 function Sdk.init(options)
 
-    mainMovement = Movement.new(options.startPosition)
+    mainMovement = Movement.new(options.startPosition, options.maxDistance)
 
     if IS_TESTING then
         _createTestGroup()

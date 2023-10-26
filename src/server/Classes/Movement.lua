@@ -2,8 +2,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Classes = script.Parent
+local FastCastFolder = ReplicatedStorage.FastCast
 
 local Bezier = require(Classes.Bezier)
+local FastCast = require(FastCastFolder.FastCastRedux)
 
 local IS_TESTING = true
 
@@ -30,16 +32,19 @@ local function _createParts(startPosition)
 
     local pointA = Instance.new("Part", points)
     pointA.Name = "PointA"
+    pointA.Anchored = true
     pointA.CanCollide = false
     pointA.Massless = true
 
     local pointB = Instance.new("Part", points)
     pointB.Name = "PointB"
+    pointB.Anchored = true
     pointB.CanCollide = false
     pointB.Massless = true
 
     local pointC = Instance.new("Part", points)
     pointC.Name = "PointC"
+    pointC.Anchored = true
     pointC.CanCollide = false
     pointC.Massless = true
 
@@ -74,7 +79,7 @@ local function _getTargetRootPart(target)
     return humanoidRootPart
 end
 
-function movement.new(startPosition)
+function movement.new(startPosition, maxDistance)
     local instance = {}
     local private = {}
 
@@ -85,6 +90,7 @@ function movement.new(startPosition)
     private.curveList = {}
 
     private.startPosition = startPosition
+    private.maxDistance = maxDistance
     private.target = nil
 
     private.part, private.points, private.lastTarget = _createParts(startPosition)
@@ -105,12 +111,18 @@ end
 function movementPrototype:setMovementPath()
     local private = movementPrivate[self]
 
-    local function getRandomPositionForPartB(partA, partC)
+    local function getRandomPositionForPartB(partA, partC, isPathX)
         warn(partC.Position.Z, partA.Position.Z)
 
         local x = math.random(math.min(partA.Position.X, partC.Position.X), math.max(partA.Position.X, partC.Position.X))
         local y = math.random(math.min(partA.Position.Y, partC.Position.Y), math.max(partA.Position.Y, partC.Position.Y))
         local z = math.random(math.min(partA.Position.Z, partC.Position.Z), math.max(partA.Position.Z, partC.Position.Z))
+
+        if isPathX then
+            x = math.random(-70, 70)
+        else
+            z = math.random(-150, 150)
+        end
         
         return Vector3.new(x, y, z)
     end
@@ -134,19 +146,31 @@ function movementPrototype:setMovementPath()
         until targetRootPart
     end
 
-    pointA.CFrame = CFrame.new(Vector3.new(
+    pointC.CFrame = CFrame.new(Vector3.new(
         targetRootPart.Position.X,
         targetRootPart.Position.Y,
         targetRootPart.Position.Z
     ))
 
-    pointC.CFrame = CFrame.new(Vector3.new(
+    pointA.CFrame = CFrame.new(Vector3.new(
         lastTarget.Position.X,
         lastTarget.Position.Y,
         lastTarget.Position.Z
     ))
 
-    local randomPositionForPartB = getRandomPositionForPartB(targetRootPart, lastTarget)
+    local deltaX = pointC.Position.X - pointA.Position.X
+    local deltaZ = pointC.Position.Z - pointA.Position.Z
+
+    local isPathX = false
+    if math.abs(deltaX) > math.abs(deltaZ) then
+        isPathX = true
+
+        print("The path is primarily along the X-axis.")
+    else
+        print("The path is primarily along the Z-axis.")
+    end
+
+    local randomPositionForPartB = getRandomPositionForPartB(targetRootPart, lastTarget, isPathX)
 
     pointB.CFrame = CFrame.new(Vector3.new(
         randomPositionForPartB.X,
@@ -154,9 +178,9 @@ function movementPrototype:setMovementPath()
         randomPositionForPartB.Z
     ))
 
-    local curve = Bezier.new(pointA.Position, pointC.Position, pointB.Position)
+    local curve = Bezier.new(pointA.Position, pointB.Position, pointC.Position)
     
-    private.path = curve:GetPath(0.01)
+    private.path = curve:GetPath(0.001)
 
     print("choseRandomPathForMovement:  have successful set a path for movement -> ", private.path)
 end
@@ -164,14 +188,18 @@ end
 function movementPrototype:moveToTarget()
     local private = movementPrivate[self]
 
-    local isTasking = false
+    local delayTime = 0
 
-    RunService.Heartbeat:Connect(function(step)
-        if isTasking then
-            return
+    while true do
+        local targetRootPart = _getTargetRootPart(private.target)
+		if not targetRootPart then
+			return warn("moveToTarget:  target does not exist.")
+		end
+
+		local distanceBetweenTarget = (private.target.Position - private.part.position).Magnitude
+        if distanceBetweenTarget <= private.maxDistance then
+            return warn("moveToTarget:  target has reached the max distance.")
         end
-
-        isTasking = true
 
         if not next(private.path) then
             return print("moveToTarget:  there are not more values in path.")
@@ -180,10 +208,8 @@ function movementPrototype:moveToTarget()
         private.part.Position = private.path[1]
         table.remove(private.path, 1)
 
-        task.wait(0.1)
-
-        isTasking = false
-    end)
+        task.wait(delayTime)
+    end
 end
 
 function movementPrototype:addPlayerToMovementGroup(player)
