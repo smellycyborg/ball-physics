@@ -1,5 +1,6 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
 local Classes = script.Parent.Classes
 
@@ -28,6 +29,23 @@ local function _createTestGroup()
     testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 0.5, 37))
 end
 
+local function characterAdded(character)
+    local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+    local attachment1 = Instance.new("Attachment", humanoidRootPart)
+    attachment1.Name = "Attachment1"
+end
+
+local function playerAdded(player)
+    mainMovement:addPlayerToMovementGroup(player)
+    
+    player.CharacterAdded:Connect(characterAdded)
+end
+
+local function playerRemoving(player)
+
+end
+
 local function onHeartbeat(step)
 
     if isTasking then
@@ -44,24 +62,19 @@ end
 
 function Sdk.init(options)
 
-    mainMovement = Movement.new(options.startPosition, options.maxDistance)
+    mainMovement = Movement.new(options.startingPosition, options.maxDistance)
 
     if IS_TESTING then
-        _createTestGroup()
-
-        for _, testGroupMember in testGroupFolder:GetChildren() do
-            mainMovement:addPlayerToMovementGroup(testGroupMember)
-        end
-
-        mainMovement:choseRandomTargetFromGroup()
-        mainMovement:setMovementPath()
-        mainMovement:moveToTarget()
+        task.delay(5, function()
+            mainMovement:setTarget()
+        end)
     end
-
-
 
     -- bindings
     RunService.Heartbeat:Connect(onHeartbeat)
+
+    Players.PlayerAdded:Connect(playerAdded)
+    Players.PlayerRemoving:Connect(playerRemoving)
 
 end
 

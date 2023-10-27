@@ -7,7 +7,7 @@
       "Packages": {
         "$path": "Packages"
       },
-      "FastCastRedux": {
+      "FastCast": {
         "$path": "FastCast"
       }
     },
