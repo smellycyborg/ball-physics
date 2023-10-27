@@ -6,9 +6,6 @@
     "ReplicatedStorage": {
       "Packages": {
         "$path": "Packages"
-      },
-      "FastCast": {
-        "$path": "FastCast"
       }
     },
 

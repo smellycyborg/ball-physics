@@ -17,16 +17,20 @@ local function _createTestGroup()
     testGroupFolder.Name = "TestGroup"
 
     local testGroupMemberA = Instance.new("Part", testGroupFolder)
+    testGroupMemberA.BrickColor = BrickColor.Random()
+    testGroupMemberA.Size = Vector3.new(5, 5, 5)
     testGroupMemberA.Name = "TestGroupMemberA"
     testGroupMemberA.Anchored = true
     testGroupMemberA.CanCollide = false
-    testGroupMemberA.CFrame = CFrame.new(Vector3.new(-142, 0.5, 37))
+    testGroupMemberA.CFrame = CFrame.new(Vector3.new(-142, 3, 37))
 
     local testGroupMemberB = Instance.new("Part", testGroupFolder)
+    testGroupMemberB.BrickColor = BrickColor.Random()
+    testGroupMemberB.Size = Vector3.new(5, 5, 5)
     testGroupMemberB.Name = "TestGroupMemberA"
     testGroupMemberB.Anchored = true
     testGroupMemberB.CanCollide = false
-    testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 0.5, 37))
+    testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 3, 37))
 end
 
 local function characterAdded(character)
@@ -38,7 +42,7 @@ end
 
 local function playerAdded(player)
     mainMovement:addPlayerToMovementGroup(player)
-    
+
     player.CharacterAdded:Connect(characterAdded)
 end
 
@@ -62,11 +66,26 @@ end
 
 function Sdk.init(options)
 
-    mainMovement = Movement.new(options.startingPosition, options.maxDistance)
+    mainMovement = Movement.new(
+        options.startingPosition, 
+        options.maxDistance,
+        options.timeUntilNextTarget,
+        options.startSpeed,
+        options.maxSpeed
+    )
+
+    print("Started movement.")
 
     if IS_TESTING then
+        _createTestGroup()
+
+        for _, groupMember in testGroupFolder:GetChildren() do 
+            mainMovement:addPlayerToMovementGroup(groupMember)
+        end
+
+
         task.delay(5, function()
-            mainMovement:setTarget()
+           mainMovement:startMovement()
         end)
     end
 
