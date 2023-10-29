@@ -24,13 +24,13 @@ local function _createTestGroup()
     testGroupMemberA.CanCollide = false
     testGroupMemberA.CFrame = CFrame.new(Vector3.new(-142, 3, 37))
 
-    local testGroupMemberB = Instance.new("Part", testGroupFolder)
-    testGroupMemberB.BrickColor = BrickColor.Random()
-    testGroupMemberB.Size = Vector3.new(5, 5, 5)
-    testGroupMemberB.Name = "TestGroupMemberA"
-    testGroupMemberB.Anchored = true
-    testGroupMemberB.CanCollide = false
-    testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 3, 37))
+    -- local testGroupMemberB = Instance.new("Part", testGroupFolder)
+    -- testGroupMemberB.BrickColor = BrickColor.Random()
+    -- testGroupMemberB.Size = Vector3.new(5, 5, 5)
+    -- testGroupMemberB.Name = "TestGroupMemberA"
+    -- testGroupMemberB.Anchored = true
+    -- testGroupMemberB.CanCollide = false
+    -- testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 3, 37))
 end
 
 local function characterAdded(character)

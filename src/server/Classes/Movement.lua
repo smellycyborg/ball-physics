@@ -2,7 +2,12 @@ local RunService = game:GetService("RunService")
 
 local Classes = script.Parent
 
-local Bezier = require(Classes.Bezier)
+local Bezier = require(Classes.BetterBezier)
+
+local USING_ASSEMBLY = true
+local USER_VECTOR = false
+local WITH_CURVE = true
+local USE_RAY_CHECK = false
 
 local movement = {}
 local movementPrototype = {}
@@ -23,7 +28,7 @@ local function _createInstances(startingPosition)
 
     local movementPart = Instance.new("Part")
     movementPart.Name = "MovementPart"
-    movementPart.Size = Vector3.new(5, 5, 5)
+    movementPart.Size = Vector3.new(6, 6, 6)
     movementPart.Massless = true
     movementPart.Anchored = false
     movementPart.Shape = "Ball"
@@ -40,10 +45,22 @@ local function _createInstances(startingPosition)
     attachment0.Name = "Attachment0"
 
     local vectorForce = Instance.new("VectorForce", movementPart)
+    vectorForce.Name = "VectorForce"
     vectorForce.ApplyAtCenterOfMass = true
 	vectorForce.Force = Vector3.new(0, movementPart:GetMass() * workspace.Gravity, 0)
 	vectorForce.RelativeTo = Enum.ActuatorRelativeTo.World
 	vectorForce.Attachment0 = attachment0
+
+    local attachment1 = Instance.new("Attachment")
+    attachment1.Name = "Attachment1"
+
+    -- local angularVelocity = Instance.new("AngularVelocity", movementPart)
+    -- angularVelocity.Name = "AngularVelocity"
+    -- angularVelocity.Attachment0 = attachment0
+
+    -- local linearVelocity = Instance.new("BodyVelocity", movementPart)
+    -- linearVelocity.Velocity = Vector3.new(0, 0, 0) 
+    -- linearVelocity.MaxForce = Vector3.new(0, movementPart:GetMass() * workspace.Gravity, 0)
 
     local pointB = Instance.new("Part")
     pointB.Name = "PointB"
@@ -75,6 +92,7 @@ function movement.new(
     private.movementPart, private.startingPart, private.pointB = _createInstances(startingPosition)
 
     private.mainTarget = private.startingPart
+    private.lastTarget = private.startingPart
     private.maxDistance = maxDistance
     private.timeUntilNextTarget = timeUntilNextTarget
     private.startSpeed = startSpeed
@@ -86,10 +104,14 @@ function movement.new(
     private.canSetTarget = true
     private.canMove = true
     private.index = 2
+    private.t = 0
     private.timesHit = 1.1
+    private.points = 5
+    private.offsetMul = 1
     private.speed = private.startSpeed
+    private.actualSpeed = 0
 
-    private.divisionNumber = 3
+    private.divisionNumber = 6
 
     movementPrivate[instance] = private
 
@@ -98,36 +120,65 @@ end
 
 function movementPrototype:startMovement()
     self:setTarget()
-
-    -- self:setCurve()
     self:startDistanceCheck()
-
 end
 
-function movementPrototype:setCurve()
+function movementPrototype:hasHit()
     local private = movementPrivate[self]
 
-    local direction = (private.mainTarget.position - private.movementPart.Position).Unit
+    if USE_RAY_CHECK then
+        local direction = private.movementPart.Velocity.Unit
+        local distance = private.movementPart.Velocity.Magnitude * (1/60)
+        local ray = Ray.new(private.movementPart.Position, direction * distance)
 
-    local pointBPosition = private.movementPart.Position + direction * math.random(1, 50)
+        local hitPart, hitPosition = workspace:FindPartOnRay(ray, private.movementPart, true, false)
 
-    if math.abs(direction.X) > math.abs(direction.Z) then
-        -- If the line is predominantly along the X-axis
+        warn(hitPart)
 
-        pointBPosition = pointBPosition + Vector3.new(0, 0, math.random(1, 50))
+        if hitPart then
+            if hitPart == private.mainTarget or private.mainTarget.Parent:FindFirstChild(hitPart) then
+                return true
+            else
+                return false
+            end
+        else
+            return false
+        end
     else
-        -- If the line is predominantly along the Z-axis
+        local distance = (private.mainTarget.Position - private.movementPart.Position).Magnitude
+        if distance <= private.maxDistance then
+            return true
+        else
+            return false
+        end
+    end
+end
 
-        pointBPosition = pointBPosition + Vector3.new(math.random(1, 50), 0, 0)
+function movementPrototype:setLinearVelocity()
+    local private = movementPrivate[self]
+
+    if not private.mainTarget then
+        return warn("Target has been destroyed.")
     end
 
-    private.pointB.CFrame = CFrame.new(pointBPosition)
+    if WITH_CURVE then
+        private.offset = (private.offsetMul * private.offsetForce)
+    end
 
-    local curve = Bezier.new(private.movementPart.Position, private.pointB.Position, private.mainTarget.Position)
-    
-    private.path = curve:GetPath(0.2)
+    local direction = WITH_CURVE and (private.mainTarget.Position - private.movementPart.Position).Unit 
+        or (private.mainTarget.Position - private.lastTarget.Position).Unit
+    local velocity = WITH_CURVE and (direction + private.offset) * private.actualSpeed
+        or direction * private.actualSpeed
 
-    -- print("setCurve:  have successful set a path for movement -> ", private.path)
+    private.movementPart.AssemblyLinearVelocity = velocity
+
+    if WITH_CURVE then
+        local remainingDistance = (private.mainTarget.Position - private.movementPart.Position).Magnitude
+        local totalDistance = (private.mainTarget.Position - private.lastTarget.Position).Magnitude
+        local progress = 1 - (remainingDistance / totalDistance)
+
+        private.offsetMul = math.min(remainingDistance / totalDistance, 1)
+    end
 end
 
 function movementPrototype:setVectorVelocity()
@@ -136,61 +187,111 @@ function movementPrototype:setVectorVelocity()
     if not private.mainTarget then
         return warn("Target has been destroyed.")
     end
-
-    -- local isPath = #private.path >= private.index
-    -- if isPath then
-    --     local distanceBetweenMovementPartAndTarget = (private.path[private.index] - private.movementPart.Position).Magnitude
-    --     if distanceBetweenMovementPartAndTarget <= 2 then
-    --         private.index += 1
-    --     end
-    -- end
-
-    -- local toTarget = not isPath and private.mainTarget.Position or private.path[private.index]
-
-    local direction = (private.mainTarget.Position - private.movementPart.Position).Unit
-
-    private.movementPart.AssemblyLinearVelocity = direction * private.speed
 end
 
 function movementPrototype:startDistanceCheck()
     local private = movementPrivate[self]
-    
-    local isTasking = false
 
-    RunService.Heartbeat:Connect(function(step)
+    RunService.Heartbeat:Connect(function(_step)
         if isTasking then
             return
         end
-    
+
         isTasking = true
 
         if not private.mainTarget then
+            self:reset() 
             return warn("Target has been destroyed.")
         end
 
-        if not private.path then
-            return warn("There is no path.")
-        end
-
-        local distanceBetweenPartAndTarget = (private.mainTarget.Position - private.movementPart.Position).Magnitude
-
-        if distanceBetweenPartAndTarget <= private.maxDistance then
+        local hasHit = self:hasHit()
+        if hasHit then
             self:setTarget()
-            -- self:setCurve()
-
-            -- self:reset()
         else
-            self:setVectorVelocity()
+            if USING_ASSEMBLY then
+                self:setLinearVelocity()
+            end
         end
-    
+
         isTasking = false
     end)
+end
+
+function movementPrototype:setTarget()
+    local private = movementPrivate[self]
+
+    if not private.canSetTarget then
+        return
+    end
+
+    if not next(private.group) then
+        self:setTarget()
+
+        return
+    end
+
+    local randomIndex = #private.group > 1 and math.random(1, #private.group) or 1
+    local targetRootPart = self:getTargetRootPart(private.group[randomIndex])
+    if not targetRootPart then
+        self:setTarget()
+        
+        return
+    end
+
+    -- set velocity to zero
+    if USING_ASSEMBLY then  
+        private.movementPart.AssemblyLinearVelocity = Vector3.zero
+        private.movementPart.Velocity = Vector3.zero
+    elseif USING_VECTOR then
+        private.movementPart.VectorForce.Force = Vector3.zero
+    end
+    if private.movementPart:FindFirstChild("AngularVelocity") then
+        private.movementPart.AngularVelocity.AngularVelocity = Vector3.zero
+    end
+    -- private.movementPart.Velocity = Vector3.zero
+
+    -- private.movementPart.Velocity = Vector3.new(0, 0, 0)
+    private.path = {}
+    private.index = 1
+    private.offsetMul = 1
+    private.lastTarget = private.mainTarget
+    private.mainTarget = targetRootPart
+
+    -- set offset
+    if WITH_CURVE then
+        private.offsetForce = private.lastTarget.CFrame.LookVector.Unit
+    end
+
+     -- set speed
+     if private.speed >= private.maxSpeed then
+        private.speed = private.maxSpeed
+     else
+        private.speed = private.speed + private.speed / private.divisionNumber
+     end
+     private.actualSpeed = math.clamp(private.speed, private.startSpeed, private.maxSpeed)
+
+     -- check if targets are far enough to create curve
+     local distanceBetweenTargets = (private.mainTarget.Position - private.lastTarget.Position).Magnitude
+     if distanceBetweenTargets < 50 then
+        WITH_CURVE = false
+     else
+        WITH_CURVE = true
+     end
 end
 
 function movementPrototype:reset()
     local private = movementPrivate[self]
 
-    private.movementPart.AssemblyLinearVelocity= Vector3.new(0, 0, 0)
+    if USING_ASSEMBLY then  
+        private.movementPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+    elseif USING_VECTOR then
+        private.movementPart.VectorForce.Force = Vector3.new(0, 0, 0)
+    end
+
+    if private.movementPart:FindFirstChild("AngularVelocity") then
+        private.movementPart.AngularVelocity.AngularVelocity = Vector3.new(0, 0, 0)
+    end
+
     private.movementPart.CFrame = CFrame.new(private.startingPart.Position)
     private.mainTarget = private.startingPart
 
@@ -203,7 +304,6 @@ function movementPrototype:reset()
     task.delay(private.timeUntilNextTarget, function()
 
         self:setTarget()
-        -- self:setCurve()
     end)
 end
 
@@ -217,42 +317,6 @@ function movementPrototype:removePlayerFromMovementGroup(player)
     local private = movementPrivate[self]
 
     table.remove(private.group, table.find(private.group, player))
-end
-
-function movementPrototype:setTarget()
-    local private = movementPrivate[self]
-
-    if not private.canSetTarget then
-        return
-    end
-
-    if not next(private.group) then
-        self:setTarget()
-        -- self:setCurve()
-
-        return
-    end
-
-    local randomIndex = #private.group > 1 and math.random(1, #private.group) or 1
-    local targetRootPart = self:getTargetRootPart(private.group[randomIndex])
-    if not targetRootPart then
-        self:setTarget()
-        -- self:setCurve()
-        
-        return
-    end
-
-    private.mainTarget = targetRootPart
-
-    private.speed = private.speed + private.speed / private.divisionNumber
-
-    -- private.divisionNumber = private.divisionNumber + private.divisionNumber / 3
-
-    if private.speed >= private.maxSpeed then
-        private.speed = private.maxSpeed
-    end
-
-    -- warn("Speed:  ", private.speed)
 end
 
 function movementPrototype:getTargetRootPart(target)
