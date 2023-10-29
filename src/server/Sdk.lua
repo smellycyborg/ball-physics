@@ -1,12 +1,18 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
 local Classes = script.Parent.Classes
+local Packages = ReplicatedStorage.Packages
 
 local Movement = require(Classes.Movement)
 
+local Comm = require(Packages.comm)
+
 local IS_TESTING = true
+
+local serverComm = Comm.ServerComm.new(ReplicatedStorage, "Comm")
 
 local isTasking = false
 
@@ -33,16 +39,54 @@ local function _createTestGroup()
     -- testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 3, 37))
 end
 
+local function _setCanTouch(character)
+    local player = Players:GetPlayerFromCharacter(character)
+
+    local hasLoaded = character:FindFirstChild("HumanoidRootPart") or player.CharacterAppearanceLoaded:Wait()
+
+    for _, part in character:GetChildren() do
+        if part:IsA("BasePart") or part:IsA("Part") and part.Name ~= "HumanoidRootPart" then
+            part.CanTouch = false
+        end
+    end
+end
+
+local function _setHitbox(character, isPlayer)
+    if isPlayer then
+        local player = Players:GetPlayerFromCharacter(character)
+
+        local hasLoaded = character:FindFirstChild("HumanoidRootPart") or player.CharacterAppearanceLoaded:Wait()
+    end
+
+    local hitbox = Instance.new("Part")
+    hitbox.Name = "Hitbox"
+    hitbox.CFrame = not isPlayer and CFrame.new(character.Position) or CFrame.new(character:FindFirstChild("HumanoidRootPart").Position)
+    hitbox.Size = Vector3.new(6, 8, 6)
+    hitbox.Massless = true
+    hitbox.CanCollide = false
+    hitbox.BrickColor = BrickColor.Random()
+    hitbox.Transparency = 0.5
+    hitbox.Parent = character
+
+    local weld = Instance.new("Weld", hitbox)
+    weld.Part0 = hitbox
+    weld.Part1 = isPlayer and character:FindFirstChild("HumanoidRootPart") or character
+end
+
 local function characterAdded(character)
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
-    local attachment1 = Instance.new("Attachment", humanoidRootPart)
-    attachment1.Name = "Attachment1"
+    _setHitbox(character, true)
 end
 
 local function playerAdded(player)
     mainMovement:addPlayerToMovementGroup(player)
 
+    if player.Character then
+        characterAdded(player.Character)
+
+        return
+    end
     player.CharacterAdded:Connect(characterAdded)
 end
 
@@ -66,13 +110,38 @@ end
 
 function Sdk.init(options)
 
+    -- clone client scripts to start player scripts
+	local ClientScripts = script.Parent.ClientScripts
+	local clientScriptsClone = ClientScripts:Clone()
+	clientScriptsClone.Name = "ClientScripts"
+	clientScriptsClone.Parent = StarterPlayer:WaitForChild("StarterPlayerScripts")
+
+    local triggerAsTarget = serverComm:CreatSignal("TriggerAsTarget")
+
     mainMovement = Movement.new(
         options.startingPosition, 
         options.maxDistance,
         options.timeUntilNextTarget,
         options.startSpeed,
-        options.maxSpeed
+        options.maxSpeed,
+        options.distanceToBlock
     )
+
+    mainMovement.killerPlayer:Connect(function(player)
+        mainMovement:removePlayerFromMovementGroup(player)
+
+        local character = player.Character
+        if not character then
+            return
+        end
+
+        local humanoid = character:FindFirstChild("Humanoid")
+        if not humanoid then
+            return
+        end
+
+        humanoid.Health -= 1000
+    end)
 
     print("Started movement.")
 
@@ -81,19 +150,24 @@ function Sdk.init(options)
 
         for _, groupMember in testGroupFolder:GetChildren() do 
             mainMovement:addPlayerToMovementGroup(groupMember)
+            _setHitbox(groupMember, false)
         end
 
 
-        task.delay(5, function()
+        task.delay(10, function()
            mainMovement:startMovement()
         end)
     end
 
     -- bindings
-    RunService.Heartbeat:Connect(onHeartbeat)
+    -- RunService.Heartbeat:Connect(onHeartbeat)
 
     Players.PlayerAdded:Connect(playerAdded)
     Players.PlayerRemoving:Connect(playerRemoving)
+
+    triggerAsTarget:Connect(function(player)
+        mainMovement:setTarget(player, cameraCFrame)
+    end)
 
 end
 
