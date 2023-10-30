@@ -107,39 +107,48 @@ end
 function movementPrototype:setTarget(player, cameraCFrame)
     local private = movementPrivate[self]
 
-    if private.targetPlayer ~= player then
-        return
-    end
+    if player ~= nil then
+        if private.targetPlayer ~= player then
+            return
+        end
 
-    local distanceBetweenCurrentTarget = (private.currentTarget.Position - private.movementPart.Position).Magnitude
-    if distanceBetweenCurrentTarget > private.distanceToBlock then
-        return
+        if not private.currentTarget then
+            return
+        end
+
+        local distanceBetweenCurrentTarget = (private.currentTarget.Position - private.movementPart.Position).Magnitude
+        if distanceBetweenCurrentTarget > private.distanceToBlock then
+            return
+        end
     end
 
     local randomIndex = #private.group > 1 and math.random(1, #private.group) or 1
     local targetHitbox, targetPlayer = self:getTargetHitbox(private.group[randomIndex])
     if not targetHitbox or targetHitbox == private.currentTarget then
+        task.wait()
+
         self:setTarget()
         
         return warn("setTarget:  Could not find target's Hitbox.")
     end
 
-    private.targetPlayer = player
+    private.targetPlayer = private.group[randomIndex]
+    private.curveMul = 1
+    -- set target
+    private.currentTarget = targetHitbox
+    private.blocked = false
 
     -- reset velocity for movement part
     -- private.movementPart.AssemblyLinearVelocity = Vector3.zero
     -- private.movementPart.Velocity = Vector3.zero
 
     -- set curve force
-    private.curveForce = targetHitbox.Parent.ClassName ~= "Model" and private.currentTarget.CFrame.LookVector.Unit or cameraCFrame.LookVector.Unit
+    private.curveForce = player == nil and private.startingPart.CFrame.LookVector.Unit or cameraCFrame.LookVector.Unit
 	if private.curveForce and private.curveForce.Y < 0 then
 		private.curveForce *= Vector3.new(1, 0, 1)
 	end
 
-    private.curveMul = 1
-
-    -- set target
-    private.currentTarget = targetHitbox
+    private.curveForce = private.curveForce or Vector3.zero
 
     -- check if targets are far enough to create curve
     local distanceBetweenTargets = (private.currentTarget.Position - private.movementPart.Position).Magnitude
@@ -149,8 +158,6 @@ function movementPrototype:setTarget(player, cameraCFrame)
         private.withCurve = false
     end
 
-    private.curveForce = private.curveForce or Vector3.zero
-
 	self:increaseSpeed()
 end
 
@@ -158,7 +165,7 @@ function movementPrototype:updateVelocity()
     local private = movementPrivate[self]
 
 	if not private.currentTarget then 
-        return 
+        return
     end
 	
 	if private.curveMul > 0 then
@@ -193,9 +200,19 @@ function movementPrototype:runTargetsHandle()
         end
 
         if self:hasHit() then
-            self:reset()
+            if private.blocked == true then
+                return
+            else
+                if private.currentTarget.Name == "HitboxTest" then
+                    self:setTarget()
 
-            self.killPlayer:Fire(private.targetPlayer)
+                    return
+                elseif private.currentTarget.Parent.ClassName == "Model" then
+                    self:reset()
+
+                    self.killPlayer:Fire(private.targetPlayer)
+                end
+            end
         end
     end)
 end
@@ -203,11 +220,11 @@ end
 function movementPrototype:reset()
     local private = movementPrivate[self]
 
+    private.currentTarget = nil
     private.movementPart.AssemblyLinearVelocity = Vector3.zero
     -- private.movementPart.Velocity = Vector3.zero
 
     private.movementPart.CFrame = CFrame.new(private.startingPart.Position)
-    private.currentTarget = private.startingPart
     private.speed = private.startSpeed
 
     if not next(private.group) then
@@ -224,7 +241,7 @@ function movementPrototype:increaseSpeed()
 
     -- set actual speed
     if private.speed < private.maxSpeed then
-        private.speed = math.clamp(private.speed + private.speedIncrement, private.startSpeed, private.maxSpeed)
+        private.speed = math.clamp(private.speed + private.speedIncrement / private.divisionNumber, private.startSpeed, private.maxSpeed)
     end
 end
 
@@ -258,8 +275,8 @@ end
 function movementPrototype:getTargetHitbox(target)
     local private = movementPrivate[self]
 
-    if target.ClassName == "BasePart" or target.ClassName == "Part" then
-        return target:FindFirstChild("Hitbox")
+    if target:FindFirstChild("HitboxTest") then
+        return target:FindFirstChild("HitboxTest")
     end
 
     local character = target.Character
@@ -283,6 +300,41 @@ function movementPrototype:getTargetHitbox(target)
     end
 
     return hitbox
+end
+
+function movementPrototype:canTargetPlayerBlock(player)
+    local private = movementPrivate[self]
+
+    if not private.currentTarget then
+        return
+    end
+
+    local distanceBetweenTarget = (private.currentTarget.Position - private.movementPart.Position).Magnitude
+    if distanceBetweenTarget <= private.distanceToBlock then
+        return true
+    else
+        return false
+    end
+end
+
+function movementPrototype:isPlayerInMovementGroup(player)
+    local private = movementPrivate[self]
+    return table.find(private.group, player)
+end
+
+function movementPrototype:getCurrentTarget()
+    local private = movementPrivate[self]
+    return private.currentTarget
+end
+
+function movementPrototype:getTargetPlayer()
+    local private = movementPrivate[self]
+    return private.targetPlayer
+end
+
+function movementPrototype:setBlocked(player)
+    local private = movementPrivate[self]
+    private.blocked = true
 end
 
 function movementPrototype:destroy()

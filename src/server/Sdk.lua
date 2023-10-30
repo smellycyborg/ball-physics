@@ -28,15 +28,15 @@ local function _createTestGroup()
     testGroupMemberA.Name = "TestGroupMemberA"
     testGroupMemberA.Anchored = true
     testGroupMemberA.CanCollide = false
-    testGroupMemberA.CFrame = CFrame.new(Vector3.new(-142, 3, 37))
+    testGroupMemberA.CFrame = CFrame.new(Vector3.new(-142, 7, 37))
 
-    -- local testGroupMemberB = Instance.new("Part", testGroupFolder)
-    -- testGroupMemberB.BrickColor = BrickColor.Random()
-    -- testGroupMemberB.Size = Vector3.new(5, 5, 5)
-    -- testGroupMemberB.Name = "TestGroupMemberA"
-    -- testGroupMemberB.Anchored = true
-    -- testGroupMemberB.CanCollide = false
-    -- testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 3, 37))
+    local testGroupMemberB = Instance.new("Part", testGroupFolder)
+    testGroupMemberB.BrickColor = BrickColor.Random()
+    testGroupMemberB.Size = Vector3.new(5, 5, 5)
+    testGroupMemberB.Name = "TestGroupMemberA"
+    testGroupMemberB.Anchored = true
+    testGroupMemberB.CanCollide = false
+    testGroupMemberB.CFrame = CFrame.new(Vector3.new(118, 7, 37))
 end
 
 local function _setCanTouch(character)
@@ -59,13 +59,13 @@ local function _setHitbox(character, isPlayer)
     end
 
     local hitbox = Instance.new("Part")
-    hitbox.Name = "Hitbox"
+    hitbox.Name = isPlayer and "Hitbox" or "HitboxTest"
     hitbox.CFrame = not isPlayer and CFrame.new(character.Position) or CFrame.new(character:FindFirstChild("HumanoidRootPart").Position)
     hitbox.Size = Vector3.new(6, 8, 6)
     hitbox.Massless = true
     hitbox.CanCollide = false
+    hitbox.Transparency = 1
     hitbox.BrickColor = BrickColor.Random()
-    hitbox.Transparency = 0.5
     hitbox.Parent = character
 
     local weld = Instance.new("Weld", hitbox)
@@ -74,9 +74,16 @@ local function _setHitbox(character, isPlayer)
 end
 
 local function characterAdded(character)
+    local player = Players:GetPlayerFromCharacter(character)
+
     local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 
     _setHitbox(character, true)
+    
+    local foundPlayerInGroup = mainMovement:isPlayerInMovementGroup(player)
+    if not foundPlayerInGroup then
+        mainMovement:addPlayerToMovementGroup(player)
+    end
 end
 
 local function playerAdded(player)
@@ -116,7 +123,7 @@ function Sdk.init(options)
 	clientScriptsClone.Name = "ClientScripts"
 	clientScriptsClone.Parent = StarterPlayer:WaitForChild("StarterPlayerScripts")
 
-    local triggerAsTarget = serverComm:CreatSignal("TriggerAsTarget")
+    local triggerAsTarget = serverComm:CreateSignal("TriggerAsTarget")
 
     mainMovement = Movement.new(
         options.startingPosition, 
@@ -127,9 +134,12 @@ function Sdk.init(options)
         options.distanceToBlock
     )
 
-    mainMovement.killerPlayer:Connect(function(player)
-        mainMovement:removePlayerFromMovementGroup(player)
+    mainMovement.killPlayer:Connect(function(player)
+        if not player then
+            return
+        end
 
+        mainMovement:removePlayerFromMovementGroup(player)
         local character = player.Character
         if not character then
             return
@@ -165,8 +175,17 @@ function Sdk.init(options)
     Players.PlayerAdded:Connect(playerAdded)
     Players.PlayerRemoving:Connect(playerRemoving)
 
-    triggerAsTarget:Connect(function(player)
-        mainMovement:setTarget(player, cameraCFrame)
+    triggerAsTarget:Connect(function(player, cameraCFrame)
+        local targetPlayer = mainMovement:getTargetPlayer()
+        if targetPlayer ~= player then
+            return
+        end
+
+        local canBlock = mainMovement:canTargetPlayerBlock()
+        if canBlock then
+            mainMovement:setBlocked()
+            mainMovement:setTarget(player, cameraCFrame)
+        end
     end)
 
 end
