@@ -16,7 +16,9 @@ local serverComm = Comm.ServerComm.new(ReplicatedStorage, "Comm")
 
 local isTasking = false
 
-local Sdk = {}
+local Sdk = {
+    hasBlocked = {},
+}
 
 local function _createTestGroup()
     testGroupFolder = Instance.new("Folder", workspace)
@@ -61,7 +63,7 @@ local function _setHitbox(character, isPlayer)
     local hitbox = Instance.new("Part")
     hitbox.Name = isPlayer and "Hitbox" or "HitboxTest"
     hitbox.CFrame = not isPlayer and CFrame.new(character.Position) or CFrame.new(character:FindFirstChild("HumanoidRootPart").Position)
-    hitbox.Size = Vector3.new(6, 8, 6)
+    hitbox.Size = Vector3.new(4, 8, 4)
     hitbox.Massless = true
     hitbox.CanCollide = false
     hitbox.Transparency = 1
@@ -123,7 +125,7 @@ function Sdk.init(options)
 	clientScriptsClone.Name = "ClientScripts"
 	clientScriptsClone.Parent = StarterPlayer:WaitForChild("StarterPlayerScripts")
 
-    local triggerAsTarget = serverComm:CreateSignal("TriggerAsTarget")
+    local blockAsTarget = serverComm:CreateSignal("BlockAsTarget")
 
     mainMovement = Movement.new(
         options.startingPosition, 
@@ -175,7 +177,18 @@ function Sdk.init(options)
     Players.PlayerAdded:Connect(playerAdded)
     Players.PlayerRemoving:Connect(playerRemoving)
 
-    triggerAsTarget:Connect(function(player, cameraCFrame)
+    blockAsTarget:Connect(function(player, cameraCFrame)
+        local hasBlocked = table.find(Sdk.hasBlocked, player)
+        if hasBlocked then
+            return
+        end
+
+        table.insert(Sdk.hasBlocked, player)
+
+        task.delay(0.5, function()
+            table.remove(Sdk.hasBlocked, table.find(Sdk.hasBlocked, player))
+        end)
+
         local targetPlayer = mainMovement:getTargetPlayer()
         if targetPlayer ~= player then
             return

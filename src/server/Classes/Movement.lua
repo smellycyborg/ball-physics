@@ -20,13 +20,20 @@ local function _createInstances(startingPosition)
 
     local movementPart = Instance.new("Part")
     movementPart.Name = "MovementPart"
-    movementPart.Size = Vector3.new(2, 2, 2)
-    movementPart.Massless = false
+    movementPart.Size = Vector3.new(6, 6, 6)
+    movementPart.Massless = true
     movementPart.Anchored = false
     movementPart.Shape = "Ball"
-    movementPart.Transparency = 1
+    movementPart.Transparency = 0
     movementPart.Position = startingPosition
+    movementPart.BrickColor = BrickColor.new("Persimmon")
+    movementPart.Material = Enum.Material.SmoothPlastic
     movementPart.CanCollide = false
+
+    local highlight = Instance.new("Highlight", movementPart)
+    highlight.FillColor = Color3.fromRGB(255, 178, 178)
+    highlight.FillTransparency = 0.1
+    highlight.DepthMode = Enum.HighlightDepthMode.Occluded
 
     local attachment0 = Instance.new("Attachment", movementPart)
     attachment0.Name = "Attachment0"
@@ -44,6 +51,15 @@ local function _createInstances(startingPosition)
     -- gravity.RelativeTo = Enum.ActuatorRelativeTo.World
     -- gravity.ApplyAtCenterOfMass = true
 
+    local highlightFolder = Instance.new("Folder", workspace)
+    highlightFolder.Name = "HighlightFolder"
+
+    local targetHighlight = Instance.new("Highlight", highlightFolder)
+    targetHighlight.FillColor = Color3.fromRGB(255, 178, 178)
+    targetHighlight.OutlineColor = Color3.fromRGB(255, 155, 155)
+    targetHighlight.FillTransparency = 0.1
+    targetHighlight.DepthMode = Enum.HighlightDepthMode.Occluded
+
     local attachment1 = Instance.new("Attachment")
     attachment1.Name = "Attachment1"
 
@@ -51,7 +67,7 @@ local function _createInstances(startingPosition)
     attachment1.Parent = startingPart
     movementPart.Parent = workspace
 
-    return movementPart, startingPart
+    return movementPart, startingPart, targetHighlight
 end
 
 local movement = {}
@@ -72,7 +88,7 @@ function movement.new(
 
     instance.killPlayer = Signal.new()
 
-    private.movementPart, private.startingPart, private.pointB = _createInstances(startingPosition)
+    private.movementPart, private.startingPart, private.targetHighlight = _createInstances(startingPosition)
 
     private.lastTarget = private.startingPart
     private.maxDistance = maxDistance
@@ -89,9 +105,24 @@ function movement.new(
     private.speed = private.startSpeed
     private.speedIncrement = 50
     private.withCurve = true
+    private.blocked = false
     private.curveMul = 1
     private.curveForce = Vector3.zero
-    private.divisionNumber = 6
+    private.divisionNumber = 4
+
+    private.movementPart.Touched:Connect(function(otherPart)
+        if otherPart.Name == "HitboxTest" then
+            instance:setTarget()
+        else
+            task.wait(0.2)
+
+            if otherPart == private.currentTarget and otherPart.Name ~= "HitboxTest" and not private.blocked then
+                instance:reset()
+                
+                instance.killPlayer:Fire(private.targetPlayer)
+            end
+        end
+	end)
 
     movementPrivate[instance] = private
 
@@ -100,7 +131,7 @@ end
 
 function movementPrototype:startMovement()
     self:setTarget()
-    self:runTargetsHandle()
+    -- self:runTargetsHandle()
     self:runVelocityHandle()
 end
 
@@ -122,6 +153,8 @@ function movementPrototype:setTarget(player, cameraCFrame)
         end
     end
 
+    private.targetPlayer = nil
+
     local randomIndex = #private.group > 1 and math.random(1, #private.group) or 1
     local targetHitbox, targetPlayer = self:getTargetHitbox(private.group[randomIndex])
     if not targetHitbox or targetHitbox == private.currentTarget then
@@ -129,7 +162,7 @@ function movementPrototype:setTarget(player, cameraCFrame)
 
         self:setTarget()
         
-        return warn("setTarget:  Could not find target's Hitbox.")
+        return
     end
 
     private.targetPlayer = private.group[randomIndex]
@@ -137,6 +170,8 @@ function movementPrototype:setTarget(player, cameraCFrame)
     -- set target
     private.currentTarget = targetHitbox
     private.blocked = false
+
+    private.targetHighlight.Adornee = player ~= nil and private.currentTarget or private.currentTarget.Parent
 
     -- reset velocity for movement part
     -- private.movementPart.AssemblyLinearVelocity = Vector3.zero
@@ -169,7 +204,7 @@ function movementPrototype:updateVelocity()
     end
 	
 	if private.curveMul > 0 then
-		private.curveMul = math.clamp(private.curveMul - 0.1, 0, 1)
+		private.curveMul = math.clamp(private.curveMul - 0.025, 0, 1)
 	end
 	
 	local directionForce = (private.currentTarget.Position - private.movementPart.Position).Unit * private.speed
@@ -191,31 +226,31 @@ function movementPrototype:runVelocityHandle()
     end)
 end
 
-function movementPrototype:runTargetsHandle()
-    RunService.Heartbeat:Connect(function(_step)
-        local private = movementPrivate[self]
+-- function movementPrototype:runTargetsHandle()
+--     RunService.Heartbeat:Connect(function(_step)
+--         local private = movementPrivate[self]
         
-        if not private.movementPart then
-            return warn("There is no movement part.")
-        end
+--         if not private.movementPart then
+--             return warn("There is no movement part.")
+--         end
 
-        if self:hasHit() then
-            if private.blocked == true then
-                return
-            else
-                if private.currentTarget.Name == "HitboxTest" then
-                    self:setTarget()
+--         if self:hasHit() then
+--             if private.blocked == true then
+--                 return
+--             else
+--                 if private.currentTarget.Name == "HitboxTest" then
+--                     self:setTarget()
 
-                    return
-                elseif private.currentTarget.Parent.ClassName == "Model" then
-                    self:reset()
+--                     return
+--                 elseif private.currentTarget.Parent.ClassName == "Model" then
+--                     self:reset()
 
-                    self.killPlayer:Fire(private.targetPlayer)
-                end
-            end
-        end
-    end)
-end
+--                     self.killPlayer:Fire(private.targetPlayer)
+--                 end
+--             end
+--         end
+--     end)
+-- end
 
 function movementPrototype:reset()
     local private = movementPrivate[self]
